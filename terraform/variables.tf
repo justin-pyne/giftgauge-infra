@@ -78,3 +78,74 @@ variable "ecr_max_tagged_images" {
   type        = number
   default     = 30
 }
+
+
+// =============================================================================
+// PATCH for terraform/variables.tf
+//
+// Append the block below to the END of your existing variables.tf.
+// All other variables in the file stay as they are.
+// =============================================================================
+
+# ---------- Database ---------------------------------------------------------
+
+variable "rds_engine_version" {
+  description = "Postgres engine version. Pinned for reproducibility; bump deliberately when AWS releases a new minor."
+  type        = string
+  default     = "16.13"
+}
+
+variable "rds_instance_class" {
+  description = "RDS instance class. db.t3.micro is the cheapest practical option (~$13/month if 24/7) and free-tier-eligible for new accounts."
+  type        = string
+  default     = "db.t3.micro"
+}
+
+variable "rds_allocated_storage" {
+  description = "Initial storage in GB. 20 is the Postgres minimum on RDS."
+  type        = number
+  default     = 20
+
+  validation {
+    condition     = var.rds_allocated_storage >= 20
+    error_message = "RDS Postgres requires at least 20 GB of allocated storage."
+  }
+}
+
+variable "rds_max_allocated_storage" {
+  description = "Storage autoscaling ceiling in GB. RDS will grow allocated_storage up to this value if disk fills, with no downtime."
+  type        = number
+  default     = 100
+}
+
+variable "rds_master_username" {
+  description = "Master username for the RDS instance. Note RDS rejects 'admin' and treats 'postgres' as reserved-ish; pick something distinctive."
+  type        = string
+  default     = "giftgauge"
+
+  validation {
+    condition     = !contains(["admin", "rdsadmin", "postgres"], var.rds_master_username)
+    error_message = "Master username cannot be one of: admin, rdsadmin, postgres."
+  }
+}
+
+variable "rds_master_db_name" {
+  description = "Initial database created at instance launch. Per-environment databases (giftgauge_dev etc.) are created by the Helm migration job at deploy time, not here."
+  type        = string
+  default     = "giftgauge"
+}
+
+# ---------- Bastion ----------------------------------------------------------
+
+variable "lab_instance_profile_name" {
+  description = "Pre-existing IAM instance profile to attach to the bastion. AWS Academy creates 'LabInstanceProfile' for student accounts; we reference it by name because we cannot create our own."
+  type        = string
+  default     = "LabInstanceProfile"
+}
+
+variable "bastion_instance_type" {
+  description = "EC2 instance type for the bastion. t3.nano is the cheapest at ~$3.50/month and is more than enough to host an idle SSM agent."
+  type        = string
+  default     = "t3.nano"
+}
+
