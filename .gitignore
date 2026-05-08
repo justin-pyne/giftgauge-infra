@@ -1,0 +1,98 @@
+# =============================================================================
+# .gitignore for giftgauge-infra
+# Tuned for Terraform + Helm + Kubernetes + AWS workflows.
+# =============================================================================
+
+# ---- Terraform --------------------------------------------------------------
+# Local .terraform directories
+**/.terraform/*
+**/.terraform.tfstate.lock.info
+
+# State files (state lives in the S3 backend, never in git)
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Crash log files
+crash.log
+crash.*.log
+
+# Variable files that may contain secrets. Commit *.tfvars.example instead.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+!*.tfvars.json.example
+
+# CLI configuration files (may contain credentials)
+.terraformrc
+terraform.rc
+
+# Override files — usually local experiments
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Terraform plan output (binary)
+*.tfplan
+
+# We DO commit .terraform.lock.hcl — pinning provider versions across
+# contributors is the modern Terraform best practice.
+
+# ---- Helm -------------------------------------------------------------------
+# Downloaded chart dependencies
+charts/
+**/charts/
+
+# Packaged charts
+*.tgz
+
+# We DO commit Chart.lock so dependency versions are reproducible.
+
+# ---- Kubernetes -------------------------------------------------------------
+# Local kubeconfigs (we never commit cluster credentials)
+kubeconfig
+kubeconfig.*
+*.kubeconfig
+
+# Locally-rendered manifests (e.g. `helm template > out.yaml` for inspection)
+rendered/
+*.rendered.yaml
+
+# ---- AWS / Secrets ----------------------------------------------------------
+# Credentials never go in git
+.aws/
+*.pem
+*.key
+
+# direnv (often used to set AWS_* vars locally)
+.envrc
+
+# Generic env files
+.env
+.env.local
+.env.*.local
+
+# ---- Editor / IDE -----------------------------------------------------------
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ---- OS noise ---------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- Misc -------------------------------------------------------------------
+# Logs
+*.log
+
+# Node tooling that occasionally appears even in infra repos
+node_modules/
+
+# Python virtualenvs (sometimes used for tooling scripts)
+.venv/
+__pycache__/
+*.pyc

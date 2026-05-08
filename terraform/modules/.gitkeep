@@ -1,0 +1,8 @@
+# Reusable Terraform modules. Populated in Phases 2-5.
+#
+#   vpc/       Phase 2 — VPC, subnets, NAT, route tables
+#   ecr/       Phase 2 — One ECR repo per service with lifecycle policies
+#   rds/      Phase 3 — Postgres in private subnets + Secrets Manager
+#   eks/      Phase 4 — EKS cluster + managed node groups (using LabRole)
+#   platform/ Phase 5 — helm_release resources for cert-manager,
+#                       ingress-nginx, kube-prometheus-stack, loki-stack
