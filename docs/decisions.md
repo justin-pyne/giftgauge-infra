@@ -357,6 +357,36 @@ isolated from primary email. For this project a single address is acceptable.
 
 ---
 
+## M. Build vs. buy on Terraform modules
+
+**Decision.** Use community modules where they save meaningful effort
+(VPC), use native Terraform resources where the wrapper overhead exceeds
+the saving (ECR).
+
+**Concretely:**
+- VPC: `terraform-aws-modules/vpc/aws` v6.x.
+- ECR: `aws_ecr_repository` resource directly, with `for_each`.
+
+**Rationale.** The community VPC module replaces ~200 lines of careful
+networking code (subnets, route tables, NAT, IGW, RT associations, NACL
+defaults) with ~50 lines of declarative inputs, and its maintainers think
+about edge cases I don't have time to. ECR by contrast is a single
+resource with three sub-blocks; calling a community module four times to
+create four identical repos costs more lines than four `aws_ecr_repository`
+resources via `for_each`.
+
+**Trade-off accepted.** A community module is a black box at 2am. We
+mitigate by pinning the major version (`~> 6.0`) and reading release notes
+before bumping.
+
+**Presentation note.** *"I used the community VPC module because writing a
+production-grade VPC by hand in 2026 isn't a real-world pattern — the
+maintainers have thought harder about edge cases than I have time to. For
+ECR I went the other way and used the native resource with for_each,
+because wrapping it in a module would have been more code than the resource
+itself. The rule I followed was: community where the savings are
+substantial, native where the wrapper is heavier than what it wraps."*
+
 ## Decisions deferred to later phases
 
 These will be made when we get to the relevant phase, with their own entries

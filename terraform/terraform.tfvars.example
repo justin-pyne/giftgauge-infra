@@ -1,0 +1,36 @@
+# =============================================================================
+# terraform.tfvars.example
+#
+# Copy this file to `terraform.tfvars` and adjust values as needed. The real
+# `terraform.tfvars` is gitignored; this `.example` is committed so other
+# operators can see what's tunable.
+#
+# Every variable below has a sensible default in variables.tf — you only
+# need to set the ones you want to override.
+# =============================================================================
+
+# AWS region. Lab permits us-east-1 and us-west-2.
+# aws_region = "us-east-1"
+
+# Project name. Used as a prefix on all resource names.
+# project_name = "giftgauge"
+
+# VPC CIDR. /16 gives 65k addresses.
+# vpc_cidr = "10.0.0.0/16"
+
+# Availability zones. Two is the EKS minimum and the cheapest configuration.
+# availability_zones = ["us-east-1a", "us-east-1b"]
+
+# Subnet CIDRs (one per AZ).
+# public_subnet_cidrs   = ["10.0.0.0/24",  "10.0.1.0/24"]
+# private_subnet_cidrs  = ["10.0.10.0/24", "10.0.11.0/24"]
+# database_subnet_cidrs = ["10.0.20.0/24", "10.0.21.0/24"]
+
+# ECR services. One repository per name.
+# ecr_services = ["frontend", "profile", "sharing", "scoring"]
+
+# How long ECR keeps untagged images before lifecycle policy deletes them.
+# ecr_untagged_image_retention_days = 7
+
+# Maximum number of tagged images per repository.
+# ecr_max_tagged_images = 30
