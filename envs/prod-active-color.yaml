@@ -1,0 +1,17 @@
+# =============================================================================
+# Active color marker.
+#
+# Single source of truth for which prod color currently serves
+# app.justinpyne.xyz. Layered via -f at helm upgrade time so it overrides
+# whatever's in envs/prod-blue or envs/prod-green.
+#
+# Updated by release-prod.yml during the cutover step.
+# Read by release-prod.yml to determine the inactive color (the deploy target).
+#
+# Manual rollback: edit this file, push to master. Then re-run release-prod.yml
+# (workflow_dispatch with version that matches what's already deployed) to
+# re-apply Helm with the flipped activeColor.
+# =============================================================================
+
+global:
+  activeColor: blue

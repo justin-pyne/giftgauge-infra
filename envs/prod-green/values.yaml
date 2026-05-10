@@ -1,0 +1,29 @@
+# =============================================================================
+# prod-green environment.
+#
+# Other half of the prod blue/green pair. Active when global.activeColor=green.
+# =============================================================================
+
+global:
+  environment: prod-green
+  color: green
+  imageTag: v0.1.0
+
+ingress:
+  host: app.justinpyne.xyz
+  tlsSecretName: prod-app-tls
+  shadowHost: prod-green.justinpyne.xyz
+  shadowTlsSecretName: prod-green-shadow-tls
+
+database:
+  envDbName: giftgauge_prod
+
+services:
+  frontend:
+    replicas: 2
+  profile:
+    replicas: 2
+  sharing:
+    replicas: 2
+  scoring:
+    replicas: 2
