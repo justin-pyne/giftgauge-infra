@@ -54,9 +54,6 @@ spec:
         app.kubernetes.io/component: migrator
     spec:
       restartPolicy: Never
-      nodeSelector:
-        nodegroup: primary
-
       volumes:
         - name: migrate-script
           configMap:

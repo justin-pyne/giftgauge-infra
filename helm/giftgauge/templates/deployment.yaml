@@ -32,8 +32,10 @@ spec:
       labels:
         {{- include "giftgauge.serviceLabels" (dict "Values" $.Values "Release" $.Release "Chart" $.Chart "service" $name) | nindent 8 }}
     spec:
+      {{- if $svc.nodegroup }}
       nodeSelector:
-        nodegroup: {{ $svc.nodegroup | default "primary" }}
+        nodegroup: {{ $svc.nodegroup }}
+      {{- end }}
 
       containers:
         - name: {{ $name }}

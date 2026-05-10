@@ -26,10 +26,10 @@ database:
 
 services:
   frontend:
-    replicas: 2
+    replicas: 1
   profile:
-    replicas: 2
+    replicas: 1
   sharing:
-    replicas: 2
+    replicas: 1
   scoring:
-    replicas: 2
+    replicas: 1

@@ -20,10 +20,14 @@ database:
 
 services:
   frontend:
-    replicas: 2
+    replicas: 1
+    nodegroup: ""
   profile:
-    replicas: 2
+    replicas: 1
+    nodegroup: ""
   sharing:
-    replicas: 2
+    replicas: 1
+    nodegroup: ""
   scoring:
-    replicas: 2
+    replicas: 1
+    nodegroup: ""
