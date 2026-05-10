@@ -1,0 +1,151 @@
+# =============================================================================
+# Promote — manually promote an image tag from one environment to another.
+#
+# Triggered manually via workflow_dispatch. The user picks:
+#   from_env: where to copy the tag from (dev, qa, uat)
+#   to_env:   where to deploy it       (qa, uat)
+#
+# Allowed promotions:
+#   dev → qa
+#   qa  → uat
+#
+# Steps:
+#   1. Read imageTag from envs/<from_env>/values.yaml
+#   2. Replace imageTag in envs/<to_env>/values.yaml with that value
+#   3. Commit + push
+#   4. helm upgrade <to_env>
+#
+# Image SHA / tag immutability: this workflow NEVER builds. It only promotes
+# an already-built tag from one env to another. The same image bytes are
+# what got smoke-tested in the lower env. Same artifact promoted, not
+# rebuilt.
+# =============================================================================
+
+name: promote
+
+on:
+  workflow_dispatch:
+    inputs:
+      from_env:
+        description: 'Source environment'
+        required: true
+        type: choice
+        options: [dev, qa]
+      to_env:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options: [qa, uat]
+      reason:
+        description: 'Promotion reason / changelog (audit trail)'
+        required: true
+        type: string
+
+concurrency:
+  # Prevent two promotions targeting the same env from racing.
+  group: promote-${{ inputs.to_env }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    name: promote ${{ inputs.from_env }} → ${{ inputs.to_env }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: validate promotion path
+        run: |
+          FROM='${{ inputs.from_env }}'
+          TO='${{ inputs.to_env }}'
+
+          # Allowed transitions only.
+          case "$FROM:$TO" in
+            dev:qa|qa:uat) echo "Promotion path '$FROM → $TO' is allowed." ;;
+            *)
+              echo "::error::Invalid promotion path '$FROM → $TO'. Allowed: dev→qa, qa→uat"
+              exit 1
+              ;;
+          esac
+
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: read source imageTag
+        id: source
+        run: |
+          # Extract `imageTag: vX.Y.Z` from envs/<from_env>/values.yaml.
+          # awk grabs the value after the colon and trims whitespace.
+          TAG=$(awk '/^[[:space:]]*imageTag:/ {gsub(/[[:space:]]/,"",$2); print $2; exit}' \
+            envs/${{ inputs.from_env }}/values.yaml)
+          if [ -z "$TAG" ]; then
+            echo "::error::Could not read imageTag from envs/${{ inputs.from_env }}/values.yaml"
+            exit 1
+          fi
+          echo "Source imageTag (${{ inputs.from_env }}): $TAG"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      - name: bump target imageTag
+        run: |
+          NEW_TAG='${{ steps.source.outputs.tag }}'
+          sed -i -E "s|(^\s*imageTag:\s*).*|\1${NEW_TAG}|" \
+            envs/${{ inputs.to_env }}/values.yaml
+
+          echo "----- diff -----"
+          git diff envs/${{ inputs.to_env }}/values.yaml
+
+      - name: commit promotion
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet envs/${{ inputs.to_env }}/values.yaml; then
+            echo "No change — ${{ inputs.to_env }} was already at ${{ steps.source.outputs.tag }}"
+          else
+            git add envs/${{ inputs.to_env }}/values.yaml
+            git commit -m "feat(promote): ${{ inputs.from_env }} → ${{ inputs.to_env }} @ ${{ steps.source.outputs.tag }}
+
+          ${{ inputs.reason }}"
+            git push
+          fi
+
+      - name: configure aws credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region:            us-east-1
+
+      - name: update kubeconfig
+        run: |
+          aws eks update-kubeconfig --region us-east-1 --name giftgauge-eks
+
+      - name: install helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+
+      - name: helm upgrade ${{ inputs.to_env }}
+        run: |
+          helm upgrade --install giftgauge ./helm/giftgauge \
+            --namespace ${{ inputs.to_env }} \
+            -f envs/${{ inputs.to_env }}/values.yaml \
+            --wait \
+            --timeout 10m
+
+      - name: verify rollout
+        run: |
+          kubectl get pods -n ${{ inputs.to_env }}
+          kubectl get ingress -n ${{ inputs.to_env }}
+
+      - name: smoke-test public URL
+        run: |
+          sleep 5
+          HOST="${{ inputs.to_env }}.justinpyne.xyz"
+          curl -sf -o /dev/null -w "HTTP %{http_code}\n" \
+            https://${HOST}/api/profile/health \
+            && echo "smoke test PASSED on $HOST"

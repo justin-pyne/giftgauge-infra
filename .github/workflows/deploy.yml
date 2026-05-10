@@ -1,0 +1,147 @@
+# =============================================================================
+# Deploy — auto-deploys to dev whenever the app repo releases a new version.
+#
+# Triggered by:
+#   - repository_dispatch (event_type=app-released) from the app repo's
+#     release.yml workflow
+#   - workflow_dispatch (manual) — useful for re-deploying without a new
+#     image push, or for forcing a specific tag
+#
+# Steps:
+#   1. Compute the target image tag (from dispatch payload or manual input)
+#   2. Update envs/dev/values.yaml with that tag (commit on main)
+#   3. Configure AWS creds, kubeconfig, helm
+#   4. helm upgrade --install giftgauge with envs/dev/values.yaml
+#
+# Why a commit-back-to-main: it creates an audit trail. `git log envs/dev/`
+# shows every dev deploy with version, source commit SHA, and message.
+# =============================================================================
+
+name: deploy
+
+on:
+  repository_dispatch:
+    types: [app-released]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Image tag to deploy (e.g., v0.1.0)'
+        required: true
+        type: string
+      reason:
+        description: 'Why are you deploying manually? (audit trail)'
+        required: false
+        type: string
+
+# Don't run two deploys to dev at once.
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+jobs:
+  deploy-dev:
+    name: deploy ${{ github.event.client_payload.version || inputs.version }} to dev
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write       # to commit the values.yaml bump
+
+    steps:
+      - name: resolve target version
+        id: target
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            VERSION="${{ github.event.client_payload.version }}"
+            REASON="auto-deploy from app repo (commit ${{ github.event.client_payload.commit_sha }})"
+          else
+            VERSION="${{ inputs.version }}"
+            REASON="${{ inputs.reason }}"
+          fi
+          if [ -z "$VERSION" ]; then
+            echo "::error::No version provided"
+            exit 1
+          fi
+          echo "version=$VERSION"  >> "$GITHUB_OUTPUT"
+          echo "reason=$REASON"    >> "$GITHUB_OUTPUT"
+          echo "Deploying $VERSION to dev — $REASON"
+
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          # Need full history (and write token) to commit back.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: bump dev imageTag in envs/dev/values.yaml
+        run: |
+          # Replace the existing imageTag line in envs/dev/values.yaml.
+          # Uses sed in-place; the surrounding YAML structure is preserved.
+          NEW_TAG='${{ steps.target.outputs.version }}'
+          sed -i -E "s|(^\s*imageTag:\s*).*|\1${NEW_TAG}|" envs/dev/values.yaml
+
+          # Show what changed.
+          git diff envs/dev/values.yaml
+
+      - name: commit values bump
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git diff --quiet envs/dev/values.yaml; then
+            echo "No change in envs/dev/values.yaml — image tag was already $NEW_TAG"
+          else
+            git add envs/dev/values.yaml
+            git commit -m "chore(deploy): dev → ${{ steps.target.outputs.version }}
+
+          ${{ steps.target.outputs.reason }}"
+            git push
+          fi
+
+      - name: configure aws credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token:     ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region:            us-east-1
+
+      - name: update kubeconfig
+        run: |
+          aws eks update-kubeconfig \
+            --region us-east-1 \
+            --name giftgauge-eks
+          kubectl get nodes
+
+      - name: install helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.16.2
+
+      - name: helm upgrade dev
+        run: |
+          helm upgrade --install giftgauge ./helm/giftgauge \
+            --namespace dev \
+            -f envs/dev/values.yaml \
+            --wait \
+            --timeout 10m
+
+      - name: verify rollout
+        run: |
+          echo "----- pods -----"
+          kubectl get pods -n dev
+
+          echo "----- ingress -----"
+          kubectl get ingress -n dev
+
+          echo "----- last 10 lines of each backend's log -----"
+          for svc in profile sharing scoring; do
+            echo "=== $svc ==="
+            kubectl logs -n dev deploy/$svc --tail=10 || true
+          done
+
+      - name: smoke-test public URL
+        run: |
+          # Allow ingress / cert-manager a moment if this was a first deploy
+          sleep 5
+          curl -sf -o /dev/null -w "HTTP %{http_code}\n" \
+            https://dev.justinpyne.xyz/api/profile/health \
+            && echo "smoke test PASSED"
