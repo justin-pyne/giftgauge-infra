@@ -7,7 +7,7 @@
 
 global:
   environment: qa
-  imageTag: v0.1.0
+  imageTag: v0.1.2
 
 ingress:
   host: qa.justinpyne.xyz
