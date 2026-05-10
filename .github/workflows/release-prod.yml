@@ -83,6 +83,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0       # full history so we can fast-forward
+
+      - name: fast-forward to latest master
+        # Job 1 committed and pushed to master while this job was waiting on
+        # the environment approval. Move HEAD to that commit before we make
+        # our own changes.
+        run: |
+          git checkout master
+          git pull --ff-only origin master
 
       - name: read active color from envs/prod-active-color.yaml
         id: colors
