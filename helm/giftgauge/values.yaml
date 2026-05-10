@@ -1,0 +1,141 @@
+# =============================================================================
+# Default values for the giftgauge chart.
+#
+# Per-environment values (envs/<env>/values.yaml) override only what differs.
+# Image tag immutability: a given image:tag is built once and promoted across
+# environments unchanged. Never re-tag.
+# =============================================================================
+
+global:
+  registry: 432921488648.dkr.ecr.us-east-1.amazonaws.com
+  imageTag: v0.1.0
+  environment: dev
+
+ingress:
+  enabled: true
+  className: nginx
+  host: dev.justinpyne.xyz       # default (overridden per env)
+  tlsSecretName: app-tls
+  clusterIssuer: letsencrypt-prod
+
+# Database connection.
+#   secretName    — Kubernetes Secret in the release namespace, created by
+#                   Terraform. Must contain DATABASE_URL (per-env DB) and
+#                   ADMIN_DATABASE_URL (master DB) keys.
+#   envDbName     — name of the per-env Postgres database. The pre-upgrade
+#                   migration Job creates this database on the master RDS
+#                   if it doesn't already exist, then applies migrations.
+database:
+  secretName: giftgauge-db
+  envDbName: giftgauge_dev       # default (overridden per env)
+
+services:
+  frontend:
+    image:
+      repository: giftgauge-frontend
+    replicas: 1
+    port: 5173
+    pathPrefix: /
+    pathRewrite: false
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        memory: 128Mi
+    healthcheck:
+      liveness: /
+      readiness: /
+    env: []
+    nodegroup: primary
+    metrics:
+      enabled: false             # frontend has no /metrics endpoint
+
+  profile:
+    image:
+      repository: giftgauge-profile
+    replicas: 1
+    port: 3001
+    pathPrefix: /api/profile
+    pathRewrite: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 256Mi
+    healthcheck:
+      liveness: /health
+      readiness: /ready
+    env:
+      - name: PORT
+        value: "3001"
+      - name: NODE_ENV
+        value: production
+      - name: LOG_LEVEL
+        value: info
+    nodegroup: primary
+    metrics:
+      enabled: true
+      path: /metrics
+      interval: 30s
+
+  sharing:
+    image:
+      repository: giftgauge-sharing
+    replicas: 1
+    port: 3002
+    pathPrefix: /api/sharing
+    pathRewrite: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 256Mi
+    healthcheck:
+      liveness: /health
+      readiness: /ready
+    env:
+      - name: PORT
+        value: "3002"
+      - name: NODE_ENV
+        value: production
+      - name: LOG_LEVEL
+        value: info
+    nodegroup: primary
+    metrics:
+      enabled: true
+      path: /metrics
+      interval: 30s
+
+  scoring:
+    image:
+      repository: giftgauge-scoring
+    replicas: 1
+    port: 3003
+    pathPrefix: /api/scoring
+    pathRewrite: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 128Mi
+      limits:
+        memory: 256Mi
+    healthcheck:
+      liveness: /health
+      readiness: /ready
+    env:
+      - name: PORT
+        value: "3003"
+      - name: NODE_ENV
+        value: production
+      - name: LOG_LEVEL
+        value: info
+      - name: AI_MODE
+        value: mock
+    nodegroup: primary
+    metrics:
+      enabled: true
+      path: /metrics
+      interval: 30s

@@ -1,33 +1,28 @@
 # =============================================================================
-# Bastion host — SSM-accessed jump host for ad-hoc RDS connectivity.
+# Bastion host — public-subnet SSH jump host for ad-hoc RDS connectivity.
 #
 # Architecture:
 #
-#   your laptop ──[aws ssm start-session]──▶ AWS SSM service
-#                                                  │
-#                                                  ▼ (back-channel)
-#                                          ┌─ private subnet ─┐
-#                                          │  bastion (EC2)   │
-#                                          │  - no public IP  │
-#                                          │  - no port 22    │
-#                                          │  - LabInstance-  │
-#                                          │    Profile with  │
-#                                          │    SSM Core      │
-#                                          └────────┬─────────┘
-#                                                   │ port-forward 5432
-#                                                   ▼
-#                                          ┌─ database subnet ─┐
-#                                          │  RDS Postgres     │
-#                                          └───────────────────┘
+#   your laptop ──[ssh -L 15432:rds-host:5432]──▶ bastion (public subnet)
+#                                                          │
+#                                                          ▼ private network
+#                                                  RDS Postgres
+#                                                  (database subnet)
 #
-# Cost: t3.nano is ~$3.50/month if 24/7. Tear down between work sessions.
+# Original design used a private-subnet bastion accessed via AWS SSM Session
+# Manager. SSM agent registration failed in our AWS Academy lab environment
+# despite correct IAM (LabRole had AmazonSSMManagedInstanceCore) and open
+# egress. Rather than spend more time debugging an undocumented lab quirk,
+# we fell back to the conventional pattern: public IP, narrowed SSH ingress.
+# Decision recorded in docs/decisions.md § N.
+#
+# Cost: t3.nano is ~$3.50/month if 24/7. EBS volume ~$1/month.
 # Run `aws ec2 stop-instances` to pause without losing the instance.
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# Latest Amazon Linux 2023 AMI. AL2023 ships with SSM agent preinstalled and
-# enabled. We pin this via a data source so the AMI ID is correct in any
-# region the project ever runs in.
+# Latest Amazon Linux 2023 AMI. AL2023 ships with the AWS CLI and dnf
+# preconfigured for the AWS package mirror.
 # -----------------------------------------------------------------------------
 data "aws_ami" "amazon_linux_2023" {
   most_recent = true
@@ -50,37 +45,51 @@ data "aws_ami" "amazon_linux_2023" {
 }
 
 # -----------------------------------------------------------------------------
-# Bastion security group — no ingress at all (SSM uses outbound polls).
-# Egress is restrictive: only HTTPS for SSM/yum mirrors and Postgres to RDS.
+# Register the local SSH public key with EC2 so it can be installed at boot.
+# The corresponding private key never leaves the operator's laptop.
 # -----------------------------------------------------------------------------
-resource "aws_security_group" "bastion" {
-  name        = "${var.project_name}-bastion"
-  description = "Bastion host SG. No ingress. SSM agent uses outbound HTTPS."
-  vpc_id      = module.vpc.vpc_id
-
-  # NOTE: deliberately no ingress rules, no port 22, nothing.
+resource "aws_key_pair" "bastion" {
+  key_name   = "${var.project_name}-bastion"
+  public_key = file(pathexpand(var.bastion_public_key_path))
 
   tags = {
     Component = "bastion"
   }
 }
 
-resource "aws_vpc_security_group_egress_rule" "bastion_https_anywhere" {
-  security_group_id = aws_security_group.bastion.id
-  description       = "HTTPS for SSM endpoints, EC2 messages, and yum mirrors."
-  cidr_ipv4         = "0.0.0.0/0"
-  ip_protocol       = "tcp"
-  from_port         = 443
-  to_port           = 443
+# -----------------------------------------------------------------------------
+# Bastion security group.
+#
+# Ingress: SSH from the operator's home IP only. NEVER 0.0.0.0/0.
+# Egress:  all (the bastion is a personal jump host; restrictive egress is
+#          theatre and we already learned the lesson with SSM).
+# -----------------------------------------------------------------------------
+resource "aws_security_group" "bastion" {
+  name        = "${var.project_name}-bastion"
+  description = "SSH bastion for ${var.project_name}. Ingress narrowed to operator IP."
+  vpc_id      = module.vpc.vpc_id
+
+  tags = {
+    Component = "bastion"
+  }
 }
 
-resource "aws_vpc_security_group_egress_rule" "bastion_to_rds" {
-  security_group_id            = aws_security_group.bastion.id
-  description                  = "Postgres to the RDS security group only."
-  referenced_security_group_id = aws_security_group.rds.id
-  ip_protocol                  = "tcp"
-  from_port                    = 5432
-  to_port                      = 5432
+resource "aws_vpc_security_group_ingress_rule" "bastion_ssh" {
+  security_group_id = aws_security_group.bastion.id
+
+  description = "SSH from operator IP only."
+  cidr_ipv4   = var.bastion_allowed_cidr
+  ip_protocol = "tcp"
+  from_port   = 22
+  to_port     = 22
+}
+
+resource "aws_vpc_security_group_egress_rule" "bastion_egress_all" {
+  security_group_id = aws_security_group.bastion.id
+
+  description = "All outbound. Bastion is a personal jump host with no data."
+  cidr_ipv4   = "0.0.0.0/0"
+  ip_protocol = "-1"
 }
 
 # -----------------------------------------------------------------------------
@@ -89,17 +98,19 @@ resource "aws_vpc_security_group_egress_rule" "bastion_to_rds" {
 resource "aws_instance" "bastion" {
   ami           = data.aws_ami.amazon_linux_2023.id
   instance_type = var.bastion_instance_type
+  key_name      = aws_key_pair.bastion.key_name
 
-  # AWS Academy ships a pre-created instance profile that wraps LabRole
-  # and includes AmazonSSMManagedInstanceCore — exactly what SSM agent
-  # needs to register itself. We CANNOT create our own instance profile
-  # in the lab, so we attach by name to the existing one.
+  # AWS Academy's pre-existing instance profile — gives the bastion the
+  # same broad permissions as the LabRole. This lets you run AWS CLI
+  # commands directly on the bastion (e.g. fetch the DB password from
+  # Secrets Manager without exporting credentials).
   iam_instance_profile = var.lab_instance_profile_name
 
-  # Private subnet. No public IP. SSM is the only way in.
-  subnet_id                   = module.vpc.private_subnets[0]
+  # Public subnet, with a public IP. This is what the SSM-pattern was
+  # avoiding; we accept it deliberately given the SSM problems we hit.
+  subnet_id                   = module.vpc.public_subnets[0]
   vpc_security_group_ids      = [aws_security_group.bastion.id]
-  associate_public_ip_address = false
+  associate_public_ip_address = true
 
   # Encrypted root volume.
   root_block_device {
@@ -116,8 +127,8 @@ resource "aws_instance" "bastion" {
     http_put_response_hop_limit = 1
   }
 
-  # Install psql so we can run queries on the bastion itself if needed
-  # (most of the time we'll port-forward to our laptop instead).
+  # Install psql client at first boot. Useful if you SSH in and want to
+  # poke the DB directly rather than tunnel from your laptop.
   user_data = <<-EOT
     #!/bin/bash
     set -eux
@@ -130,8 +141,8 @@ resource "aws_instance" "bastion" {
     Name      = "${var.project_name}-bastion"
   }
 
-  # Don't trigger a replacement when AWS releases a new AL2023 AMI; we'll
-  # cycle the bastion explicitly when we want a refreshed image.
+  # Don't trigger replacement when AWS releases a new AL2023 AMI; we cycle
+  # the bastion deliberately when we want a refreshed image.
   lifecycle {
     ignore_changes = [ami]
   }

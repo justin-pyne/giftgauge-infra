@@ -149,3 +149,134 @@ variable "bastion_instance_type" {
   default     = "t3.nano"
 }
 
+variable "bastion_allowed_cidr" {
+  description = "CIDR block allowed to SSH into the bastion. Almost always your single public IP as /32. Find with `curl -s https://api.ipify.org`."
+  type        = string
+
+  validation {
+    condition     = can(cidrhost(var.bastion_allowed_cidr, 0))
+    error_message = "bastion_allowed_cidr must be a valid CIDR block (e.g. \"203.0.113.42/32\")."
+  }
+
+  validation {
+    condition     = var.bastion_allowed_cidr != "0.0.0.0/0"
+    error_message = "Refusing to expose SSH to the entire internet. Use your real IP /32."
+  }
+}
+
+variable "bastion_public_key_path" {
+  description = "Path to the SSH public key file to install on the bastion. Generate with `ssh-keygen -t ed25519 -f ~/.ssh/giftgauge_bastion -N \"\"`."
+  type        = string
+  default     = "~/.ssh/giftgauge_bastion.pub"
+}
+
+# ---------- EKS --------------------------------------------------------------
+
+variable "lab_eks_cluster_role_name" {
+  description = "Override for the LabEksClusterRole's actual name. Leave empty (default) to auto-discover via iam:ListRoles. Set this to the literal role name (e.g. `c197...-LabEksClusterRole-xxxx`) if list-roles is denied in your lab."
+  type        = string
+  default     = ""
+}
+
+variable "lab_eks_node_role_name" {
+  description = "Override for the LabEksNodeRole's actual name. Leave empty (default) to auto-discover via iam:ListRoles. Set this to the literal role name if list-roles is denied."
+  type        = string
+  default     = ""
+}
+
+variable "lab_user_role_name" {
+  description = "Underlying role of the assumed-role session that runs `terraform apply`. Used as the principal_arn on the cluster-admin Access Entry. Default 'voclabs' is correct for AWS Academy Learner Lab."
+  type        = string
+  default     = "voclabs"
+}
+
+variable "eks_cluster_name" {
+  description = "Name of the EKS cluster. Used in resource names; appears in kubeconfig as the context name."
+  type        = string
+  default     = "giftgauge-eks"
+}
+
+variable "eks_kubernetes_version" {
+  description = "Kubernetes minor version. Pin a specific minor; bump deliberately when you've reviewed release notes."
+  type        = string
+  default     = "1.33"
+}
+
+variable "eks_node_instance_type" {
+  description = "EC2 instance type for worker nodes. Lab supports nano/micro/small/medium/large only."
+  type        = string
+  default     = "t3.medium"
+}
+
+# ----- Primary node group sizing -----
+
+variable "eks_primary_desired_size" {
+  description = "Initial desired count for the primary node group."
+  type        = number
+  default     = 2
+}
+
+variable "eks_primary_min_size" {
+  description = "Floor for the primary node group autoscaling."
+  type        = number
+  default     = 1
+}
+
+variable "eks_primary_max_size" {
+  description = "Ceiling for the primary node group autoscaling."
+  type        = number
+  default     = 4
+}
+
+# ----- Secondary node group sizing -----
+
+variable "eks_secondary_desired_size" {
+  description = "Initial desired count for the secondary node group. Used as the drain target during Day-2 patching demos."
+  type        = number
+  default     = 1
+}
+
+variable "eks_secondary_min_size" {
+  description = "Floor for the secondary node group autoscaling."
+  type        = number
+  default     = 1
+}
+
+variable "eks_secondary_max_size" {
+  description = "Ceiling for the secondary node group autoscaling. Higher than the primary's max to absorb a primary drain."
+  type        = number
+  default     = 3
+}
+
+
+# ---------- Phase 5B observability -------------------------------------------
+
+variable "public_domain" {
+  description = "Apex domain used for public-facing services. The wildcard CNAME at *.<public_domain> on Cloudflare resolves to the NLB."
+  type        = string
+  default     = "justinpyne.xyz"
+}
+
+variable "alert_email_address" {
+  description = "Email address for Let's Encrypt registration AND Alertmanager critical alerts. Same value for simplicity."
+  type        = string
+  default     = "jpyne.justin@gmail.com"
+}
+
+variable "github_oauth_client_id" {
+  description = "GitHub OAuth App Client ID used to authenticate Grafana logins. Set in terraform.tfvars; never commit."
+  type        = string
+  sensitive   = true
+}
+
+variable "github_oauth_client_secret" {
+  description = "GitHub OAuth App Client Secret. Set in terraform.tfvars; never commit."
+  type        = string
+  sensitive   = true
+}
+
+variable "gmail_app_password" {
+  description = "Gmail App Password used by Alertmanager to send email via smtp.gmail.com:587. Generated at https://myaccount.google.com/apppasswords. Set in terraform.tfvars; never commit."
+  type        = string
+  sensitive   = true
+}

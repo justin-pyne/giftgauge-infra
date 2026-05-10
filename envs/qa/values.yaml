@@ -1,0 +1,26 @@
+# =============================================================================
+# QA environment overrides.
+#
+# Used as: helm upgrade --install giftgauge ./helm/giftgauge \
+#          --namespace qa -f envs/qa/values.yaml
+# =============================================================================
+
+global:
+  environment: qa
+  imageTag: v0.1.0
+
+ingress:
+  host: qa.justinpyne.xyz
+
+database:
+  envDbName: giftgauge_qa
+
+services:
+  frontend:
+    replicas: 1
+  profile:
+    replicas: 1
+  sharing:
+    replicas: 1
+  scoring:
+    replicas: 1

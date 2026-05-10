@@ -1,0 +1,38 @@
+# =============================================================================
+# Let's Encrypt ClusterIssuer.
+#
+# Apply this file MANUALLY with `kubectl apply -f cluster-issuer.yaml` after
+# the first terraform apply (which installs cert-manager + its CRDs). This
+# resource depends on the `cert-manager.io/v1/ClusterIssuer` CRD being
+# installed, which is why we can't put it in Terraform without hitting the
+# CRD chicken-and-egg.
+#
+# What this does: tells cert-manager that whenever an Ingress is annotated
+# `cert-manager.io/cluster-issuer: letsencrypt-prod`, it should request a
+# certificate from Let's Encrypt's production endpoint, solving the HTTP-01
+# challenge through ingress-nginx.
+# =============================================================================
+
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: letsencrypt-prod
+spec:
+  acme:
+    # Production. Let's Encrypt has a staging server too — useful while
+    # iterating on cert config to avoid hitting their rate limit (50
+    # certificates per registered domain per week).
+    server: https://acme-v02.api.letsencrypt.org/directory
+
+    # Account email — Let's Encrypt sends expiry warnings here.
+    email: jpyne.justin@gmail.com
+
+    # Where cert-manager stores its account private key.
+    privateKeySecretRef:
+      name: letsencrypt-prod-account-key
+
+    # HTTP-01 challenge routed through ingress-nginx.
+    solvers:
+      - http01:
+          ingress:
+            class: nginx

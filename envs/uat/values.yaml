@@ -1,0 +1,26 @@
+# =============================================================================
+# UAT environment overrides.
+#
+# Used as: helm upgrade --install giftgauge ./helm/giftgauge \
+#          --namespace uat -f envs/uat/values.yaml
+# =============================================================================
+
+global:
+  environment: uat
+  imageTag: v0.1.0
+
+ingress:
+  host: uat.justinpyne.xyz
+
+database:
+  envDbName: giftgauge_uat
+
+services:
+  frontend:
+    replicas: 1
+  profile:
+    replicas: 1
+  sharing:
+    replicas: 1
+  scoring:
+    replicas: 1

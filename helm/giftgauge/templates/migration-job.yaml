@@ -1,0 +1,143 @@
+{{/* =========================================================================
+Migration Job — runs as a Helm pre-install/pre-upgrade hook.
+
+Two-phase:
+  1. Connect to MASTER database (giftgauge) and CREATE DATABASE
+     giftgauge_<env> if it doesn't already exist.
+  2. Connect to the per-env database (giftgauge_<env>) and run migrate.sh,
+     which applies any *.sql in /migrations/ that hasn't been recorded in
+     schema_migrations yet.
+
+Connection strategy:
+  We use libpq's PG* environment variables (PGHOST, PGPORT, PGUSER,
+  PGPASSWORD, PGSSLMODE) instead of a postgresql:// URL. Reason: the
+  auto-generated RDS master password contains characters like ( ) { % & +
+  which are reserved in URLs and must be percent-encoded. The Node 'pg'
+  driver tolerates these without encoding; psql does not, and fails with
+  "invalid percent-encoded token". Using PG* env vars sidesteps URL
+  parsing entirely.
+
+  PGSSLMODE=require — psql uses TLS but only verifies the cert if a CA
+  file is configured. The postgres:16-alpine image has no AWS RDS root
+  CA in its trust store, so verification is automatically skipped while
+  the connection is still encrypted. Same outcome as the Node driver's
+  sslmode=no-verify, just expressed differently.
+
+  migrate.sh receives DATABASE_URL=postgresql:///$TARGET_DB_NAME — a
+  URL with NO host, port, user, or password. libpq fills those in from
+  PGHOST/PGPORT/PGUSER/PGPASSWORD env vars. Only the database name comes
+  from the URL.
+
+Hook ordering: weight 0 runs AFTER the migration-configmap (weight -10),
+so the ConfigMap exists when this Job tries to mount it.
+========================================================================= */}}
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate-{{ .Release.Revision }}
+  labels:
+    {{- include "giftgauge.commonLabels" . | nindent 4 }}
+    app.kubernetes.io/component: migrator
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "0"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 1
+  ttlSecondsAfterFinished: 300
+
+  template:
+    metadata:
+      labels:
+        {{- include "giftgauge.commonLabels" . | nindent 8 }}
+        app.kubernetes.io/component: migrator
+    spec:
+      restartPolicy: Never
+      nodeSelector:
+        nodegroup: primary
+
+      volumes:
+        - name: migrate-script
+          configMap:
+            name: migration-scripts
+            defaultMode: 0755
+            items:
+              - key: migrate.sh
+                path: migrate.sh
+                mode: 0755
+
+        - name: migrations
+          configMap:
+            name: migration-scripts
+            items:
+              {{- range $path, $_ := .Files.Glob "files/migrations/*.sql" }}
+              - key: {{ base $path }}
+                path: {{ base $path }}
+              {{- end }}
+
+      containers:
+        - name: migrate
+          image: postgres:16-alpine
+          imagePullPolicy: IfNotPresent
+
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -e
+
+              # Use libpq PG* env vars instead of a URL. The DB_* fields in
+              # the Secret come straight from Terraform with no URL encoding,
+              # so special characters in the password work as-is.
+              export PGHOST="$DB_HOST"
+              export PGPORT="$DB_PORT"
+              export PGUSER="$DB_USER"
+              export PGPASSWORD="$DB_PASSWORD"
+              export PGSSLMODE=require
+
+              echo "[init] checking that database '$TARGET_DB_NAME' exists..."
+              if psql -d "$ADMIN_DB_NAME" -tAc "SELECT 1 FROM pg_database WHERE datname = '$TARGET_DB_NAME'" | grep -q 1; then
+                echo "[init] database '$TARGET_DB_NAME' already exists."
+              else
+                echo "[init] creating database '$TARGET_DB_NAME'..."
+                psql -d "$ADMIN_DB_NAME" -c "CREATE DATABASE \"$TARGET_DB_NAME\""
+              fi
+
+              # Hand off to migrate.sh. It calls psql "$DATABASE_URL" —
+              # a URL with only the database name means libpq fills in
+              # everything else from the PG* env vars set above.
+              export DATABASE_URL="postgresql:///$TARGET_DB_NAME"
+
+              echo "[init] running migrations against '$TARGET_DB_NAME'..."
+              sh /scripts/migrate.sh
+
+          env:
+            - name: TARGET_DB_NAME
+              value: {{ .Values.database.envDbName | quote }}
+            # Master database name — where CREATE DATABASE is executed.
+            # This is the RDS master DB created in database.tf.
+            - name: ADMIN_DB_NAME
+              value: "giftgauge"
+
+          # Provides DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME,
+          # DATABASE_URL, ADMIN_DATABASE_URL. We use the broken-out fields
+          # (DB_*) above and ignore the URL fields here.
+          envFrom:
+            - secretRef:
+                name: {{ .Values.database.secretName }}
+
+          volumeMounts:
+            - name: migrate-script
+              mountPath: /scripts
+              readOnly: true
+            - name: migrations
+              mountPath: /migrations
+              readOnly: true
+
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 128Mi

@@ -123,21 +123,59 @@ output "rds_master_secret_name" {
 # ---------- Bastion ----------------------------------------------------------
 
 output "bastion_instance_id" {
-  description = "EC2 instance ID of the bastion. Pass to `aws ssm start-session --target ...` to connect."
+  description = "EC2 instance ID of the bastion."
   value       = aws_instance.bastion.id
 }
 
+output "bastion_public_ip" {
+  description = "Public IP of the bastion. SSH target."
+  value       = aws_instance.bastion.public_ip
+}
+
 output "bastion_security_group_id" {
-  description = "ID of the bastion security group. Phase 4 will use this when narrowing the RDS ingress to specific source SGs."
+  description = "ID of the bastion security group. Phase 4 adds this to the RDS ingress allowlist when the SG narrows from VPC CIDR."
   value       = aws_security_group.bastion.id
 }
 
-output "bastion_ssm_session_command" {
-  description = "Copy-paste command to open an interactive shell on the bastion via SSM."
-  value       = "aws ssm start-session --target ${aws_instance.bastion.id}"
+output "bastion_ssh_command" {
+  description = "Copy-paste command to open an interactive SSH shell on the bastion."
+  value       = "ssh -i ~/.ssh/giftgauge_bastion ec2-user@${aws_instance.bastion.public_ip}"
 }
 
-output "bastion_rds_port_forward_command" {
-  description = "Copy-paste command to port-forward localhost:15432 on your laptop to RDS:5432 via the bastion. Then connect with `psql -h localhost -p 15432 -U ${aws_db_instance.main.username} -d ${aws_db_instance.main.db_name}`."
-  value       = "aws ssm start-session --target ${aws_instance.bastion.id} --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters '{\"host\":[\"${aws_db_instance.main.address}\"],\"portNumber\":[\"${aws_db_instance.main.port}\"],\"localPortNumber\":[\"15432\"]}'"
+output "bastion_rds_tunnel_command" {
+  description = "Copy-paste command that opens a local-port-forward tunnel from your laptop to RDS via the bastion. After running, in another terminal connect with `psql -h localhost -p 15432 -U <user> -d <db>` using master credentials from Secrets Manager."
+  value       = "ssh -i ~/.ssh/giftgauge_bastion -N -L 15432:${aws_db_instance.main.address}:${aws_db_instance.main.port} ec2-user@${aws_instance.bastion.public_ip}"
+}
+
+# ---------- EKS --------------------------------------------------------------
+
+output "eks_cluster_name" {
+  description = "EKS cluster name. Used by `aws eks update-kubeconfig`."
+  value       = aws_eks_cluster.main.name
+}
+
+output "eks_cluster_endpoint" {
+  description = "EKS API server endpoint URL."
+  value       = aws_eks_cluster.main.endpoint
+}
+
+output "eks_cluster_certificate_authority_data" {
+  description = "Base64-encoded cluster CA. Used by Helm/Kubernetes Terraform providers in Phase 5."
+  value       = aws_eks_cluster.main.certificate_authority[0].data
+  sensitive   = true
+}
+
+output "eks_cluster_version" {
+  description = "Kubernetes version actually running."
+  value       = aws_eks_cluster.main.version
+}
+
+output "eks_cluster_security_group_id" {
+  description = "Security group EKS auto-creates for the cluster. All managed-node-group nodes inherit it. Phase 4 references this from the RDS ingress rule."
+  value       = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
+}
+
+output "kubeconfig_command" {
+  description = "Copy-paste command to update your local kubeconfig."
+  value       = "aws eks update-kubeconfig --region ${var.aws_region} --name ${aws_eks_cluster.main.name}"
 }

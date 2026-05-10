@@ -1,0 +1,33 @@
+{{/* =========================================================================
+ServiceMonitors — Prometheus picks these up via kube-prometheus-stack's
+operator (configured to watch all namespaces in observability.tf).
+
+Each backend service exposes /metrics on its API port. The ServiceMonitor
+tells Prometheus to scrape it every 30s.
+
+Frontend has no /metrics endpoint, so its services entry has
+metrics.enabled=false and no ServiceMonitor is generated.
+========================================================================= */}}
+
+{{- range $name, $svc := .Values.services }}
+{{- if and $svc.metrics $svc.metrics.enabled }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "giftgauge.serviceLabels" (dict "Values" $.Values "Release" $.Release "Chart" $.Chart "service" $name) | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: giftgauge
+      app.kubernetes.io/component: {{ $name }}
+      app.kubernetes.io/instance: {{ $.Release.Name }}
+  endpoints:
+    - port: http                     # matches the Service port name
+      path: {{ $svc.metrics.path | default "/metrics" }}
+      interval: {{ $svc.metrics.interval | default "30s" }}
+      scrapeTimeout: 10s
+{{- end }}
+{{- end }}

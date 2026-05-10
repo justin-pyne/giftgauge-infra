@@ -1,0 +1,75 @@
+{{/* =========================================================================
+Ingress — single ingress for the whole app.
+
+Path-based routing:
+  /api/profile/*   → profile-service:3001
+  /api/sharing/*   → sharing-service:3002
+  /api/scoring/*   → scoring-service:3003
+  /                → frontend (catch-all, must come LAST)
+
+For the API paths, ingress-nginx rewrites the URL so the backends see
+the path WITHOUT the /api/<service> prefix. E.g., a request to
+  https://app.justinpyne.xyz/api/profile/users/123
+reaches the profile service as
+  GET /users/123
+
+This is configured via the `nginx.ingress.kubernetes.io/rewrite-target`
+annotation + a regex captured path. Without rewrite, backends would have
+to know about the prefix, which leaks deployment topology into the code.
+
+TLS comes from cert-manager via the `cert-manager.io/cluster-issuer`
+annotation. First request triggers a Let's Encrypt HTTP-01 challenge.
+========================================================================= */}}
+
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: giftgauge
+  labels:
+    {{- include "giftgauge.commonLabels" . | nindent 4 }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer | quote }}
+    # Rewrite captures group $2 from the path regex below.
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    # Larger uploads for AI scoring requests with image attachments.
+    nginx.ingress.kubernetes.io/proxy-body-size: 10m
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+
+  tls:
+    - hosts:
+        - {{ .Values.ingress.host }}
+      secretName: {{ .Values.ingress.tlsSecretName }}
+
+  rules:
+    - host: {{ .Values.ingress.host }}
+      http:
+        paths:
+          # API paths first — catch-all frontend path must come last so
+          # /api/* routes don't get swallowed.
+          {{- range $name, $svc := .Values.services }}
+          {{- if $svc.pathRewrite }}
+          - path: {{ $svc.pathPrefix }}(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: {{ $name }}
+                port:
+                  number: {{ $svc.port }}
+          {{- end }}
+          {{- end }}
+
+          # Frontend catch-all (no rewrite).
+          {{- range $name, $svc := .Values.services }}
+          {{- if not $svc.pathRewrite }}
+          - path: {{ $svc.pathPrefix }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $name }}
+                port:
+                  number: {{ $svc.port }}
+          {{- end }}
+          {{- end }}
+{{- end }}

@@ -1,0 +1,31 @@
+{{/* =========================================================================
+Migration scripts ConfigMap.
+
+Holds:
+  - migrate.sh (the runner script from the app repo)
+  - V*__*.sql  (one entry per .sql file in files/migrations/)
+
+This is a pre-install/pre-upgrade hook with weight -10 so it's created
+BEFORE the migration Job (weight 0) that mounts it.
+
+If we ever add V3, V4, etc., the .Files.Glob below picks them up automatically.
+========================================================================= */}}
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: migration-scripts
+  labels:
+    {{- include "giftgauge.commonLabels" . | nindent 4 }}
+    app.kubernetes.io/component: migrator
+  annotations:
+    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook-weight": "-10"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+data:
+  migrate.sh: |
+{{ .Files.Get "files/migrate.sh" | indent 4 }}
+{{- range $path, $_ := .Files.Glob "files/migrations/*.sql" }}
+  {{ base $path }}: |
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}

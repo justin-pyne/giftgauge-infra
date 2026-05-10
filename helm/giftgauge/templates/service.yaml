@@ -1,0 +1,27 @@
+{{/* =========================================================================
+Services — ClusterIP services for each Deployment.
+
+These give us in-cluster DNS names like profile.dev.svc.cluster.local
+that the ingress (and inter-service calls) can target.
+========================================================================= */}}
+
+{{- range $name, $svc := .Values.services }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "giftgauge.serviceLabels" (dict "Values" $.Values "Release" $.Release "Chart" $.Chart "service" $name) | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ $svc.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: giftgauge
+    app.kubernetes.io/component: {{ $name }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+{{- end }}

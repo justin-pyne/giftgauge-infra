@@ -1,0 +1,16 @@
+apiVersion: v2
+name: giftgauge
+description: GiftGauge — privacy-preserving gift scoring application
+
+# `type: application` is the standard for deployable charts.
+type: application
+
+# Chart version. Bumped when chart structure changes.
+# AppVersion bumped when the application code changes.
+version: 0.1.0
+appVersion: "0.1.0"
+
+# Maintainers — for chart consumers (us in this case).
+maintainers:
+  - name: Justin Pyne
+    email: jpyne.justin@gmail.com

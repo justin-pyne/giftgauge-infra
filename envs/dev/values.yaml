@@ -1,0 +1,26 @@
+# =============================================================================
+# Dev environment overrides.
+#
+# Used as: helm upgrade --install giftgauge ./helm/giftgauge \
+#          --namespace dev -f envs/dev/values.yaml
+# =============================================================================
+
+global:
+  environment: dev
+  imageTag: v0.1.0
+
+ingress:
+  host: dev.justinpyne.xyz         # was app.justinpyne.xyz; reserving app for prod
+
+database:
+  envDbName: giftgauge_dev
+
+services:
+  frontend:
+    replicas: 1
+  profile:
+    replicas: 1
+  sharing:
+    replicas: 1
+  scoring:
+    replicas: 1

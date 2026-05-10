@@ -84,14 +84,24 @@ resource "aws_security_group" "rds" {
   }
 }
 
-resource "aws_vpc_security_group_ingress_rule" "rds_from_vpc" {
+resource "aws_vpc_security_group_ingress_rule" "rds_from_eks_nodes" {
   security_group_id = aws_security_group.rds.id
 
-  description = "Postgres from anywhere inside the VPC. Narrowed in Phase 4."
-  cidr_ipv4   = module.vpc.vpc_cidr_block
-  ip_protocol = "tcp"
-  from_port   = 5432
-  to_port     = 5432
+  description                  = "Postgres from EKS worker nodes."
+  referenced_security_group_id = aws_eks_cluster.main.vpc_config[0].cluster_security_group_id
+  ip_protocol                  = "tcp"
+  from_port                    = 5432
+  to_port                      = 5432
+}
+
+resource "aws_vpc_security_group_ingress_rule" "rds_from_bastion" {
+  security_group_id = aws_security_group.rds.id
+
+  description                  = "Postgres from bastion (SSH tunnel for ad-hoc operator access)."
+  referenced_security_group_id = aws_security_group.bastion.id
+  ip_protocol                  = "tcp"
+  from_port                    = 5432
+  to_port                      = 5432
 }
 
 # RDS does not initiate outbound connections, so no egress rule needed.
