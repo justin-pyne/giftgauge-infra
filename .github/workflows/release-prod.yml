@@ -257,24 +257,27 @@ jobs:
         with:
           version: v3.16.2
 
-      - name: helm upgrade NEW active (adds public Ingress)
-        # Order matters. Add Ingress to new active FIRST so traffic has somewhere
-        # to land before we remove it from the old active.
-        run: |
-          NEW_ACTIVE='${{ needs.deploy-inactive.outputs.inactive_color }}'
-          helm upgrade --install giftgauge ./helm/giftgauge \
-            --namespace prod-${NEW_ACTIVE} \
-            -f envs/prod-${NEW_ACTIVE}/values.yaml \
-            -f envs/prod-active-color.yaml \
-            --wait \
-            --timeout 10m
-
       - name: helm upgrade OLD active (removes public Ingress)
+        # ingress-nginx's admission webhook rejects two Ingresses with the
+        # same host+path, so we must remove from old before adding to new.
+        # This creates a brief gap (~5-10s) where neither has the public
+        # Ingress. Acceptable for class demo; production would use a single
+        # router-namespace Ingress with ExternalName to avoid this gap.
         run: |
           OLD_ACTIVE='${{ needs.deploy-inactive.outputs.active_color }}'
           helm upgrade --install giftgauge ./helm/giftgauge \
             --namespace prod-${OLD_ACTIVE} \
             -f envs/prod-${OLD_ACTIVE}/values.yaml \
+            -f envs/prod-active-color.yaml \
+            --wait \
+            --timeout 10m
+
+      - name: helm upgrade NEW active (adds public Ingress)
+        run: |
+          NEW_ACTIVE='${{ needs.deploy-inactive.outputs.inactive_color }}'
+          helm upgrade --install giftgauge ./helm/giftgauge \
+            --namespace prod-${NEW_ACTIVE} \
+            -f envs/prod-${NEW_ACTIVE}/values.yaml \
             -f envs/prod-active-color.yaml \
             --wait \
             --timeout 10m
