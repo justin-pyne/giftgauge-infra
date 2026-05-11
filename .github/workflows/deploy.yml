@@ -12,9 +12,6 @@
 #   2. Update envs/dev/values.yaml with that tag (commit on main)
 #   3. Configure AWS creds, kubeconfig, helm
 #   4. helm upgrade --install giftgauge with envs/dev/values.yaml
-#
-# Why a commit-back-to-main: it creates an audit trail. `git log envs/dev/`
-# shows every dev deploy with version, source commit SHA, and message.
 # =============================================================================
 
 name: deploy
@@ -33,7 +30,6 @@ on:
         required: false
         type: string
 
-# Don't run two deploys to dev at once.
 concurrency:
   group: deploy-dev
   cancel-in-progress: false
@@ -44,7 +40,7 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write       # to commit the values.yaml bump
+      contents: write
 
     steps:
       - name: resolve target version
@@ -68,7 +64,6 @@ jobs:
       - name: checkout
         uses: actions/checkout@v4
         with:
-          # Need full history (and write token) to commit back.
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: bump dev imageTag in envs/dev/values.yaml

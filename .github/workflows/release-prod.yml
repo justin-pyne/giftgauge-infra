@@ -17,11 +17,6 @@
 #      helm upgrades both prod releases (new active first to add Ingress,
 #      then old active to remove it), verifies app.justinpyne.xyz now serves
 #      the new version.
-#
-# Rollback: re-run this workflow with the previous version; it will deploy
-# that version to the inactive color (now the previously-active blue) and
-# flip back. Or manually edit envs/prod-active-color.yaml and run any
-# helm upgrade.
 # =============================================================================
 
 name: release-prod
@@ -258,11 +253,6 @@ jobs:
           version: v3.16.2
 
       - name: helm upgrade OLD active (removes public Ingress)
-        # ingress-nginx's admission webhook rejects two Ingresses with the
-        # same host+path, so we must remove from old before adding to new.
-        # This creates a brief gap (~5-10s) where neither has the public
-        # Ingress. Acceptable for class demo; production would use a single
-        # router-namespace Ingress with ExternalName to avoid this gap.
         run: |
           OLD_ACTIVE='${{ needs.deploy-inactive.outputs.active_color }}'
           helm upgrade --install giftgauge ./helm/giftgauge \

@@ -1,20 +1,5 @@
 # =============================================================================
 # Default values for the giftgauge chart.
-#
-# Per-environment values (envs/<env>/values.yaml) override only what differs.
-# Image tag immutability: a given image:tag is built once and promoted across
-# environments unchanged. Never re-tag.
-#
-# Blue/green deployment fields:
-#   global.color         — "blue" or "green" for prod, empty string for
-#                          non-prod environments (dev/qa/uat).
-#   global.activeColor   — set at upgrade time via -f envs/prod-active-color.yaml.
-#                          When empty (non-prod), the public Ingress always
-#                          renders. When set, the public Ingress only renders
-#                          if global.color matches global.activeColor.
-#   ingress.shadowHost   — optional per-color private testing URL. Always
-#                          renders an Ingress regardless of activeColor.
-#                          Empty for non-prod.
 # =============================================================================
 
 global:
@@ -22,7 +7,6 @@ global:
   imageTag: v0.1.0
   environment: dev
 
-  # Blue/green coloring. Empty for single-color environments.
   color: ""
   activeColor: ""
 
@@ -33,8 +17,6 @@ ingress:
   tlsSecretName: app-tls
   clusterIssuer: letsencrypt-prod
 
-  # Optional per-color private testing URL. Used only by prod-blue and prod-green.
-  # The shadow Ingress is always rendered when set, regardless of activeColor.
   shadowHost: ""
   shadowTlsSecretName: shadow-tls
 

@@ -14,11 +14,6 @@
 #   2. Replace imageTag in envs/<to_env>/values.yaml with that value
 #   3. Commit + push
 #   4. helm upgrade <to_env>
-#
-# Image SHA / tag immutability: this workflow NEVER builds. It only promotes
-# an already-built tag from one env to another. The same image bytes are
-# what got smoke-tested in the lower env. Same artifact promoted, not
-# rebuilt.
 # =============================================================================
 
 name: promote

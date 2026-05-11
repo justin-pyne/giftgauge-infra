@@ -3,10 +3,6 @@
 # Simple Flyway-compatible-ish migration runner.
 # Applies any *.sql files in /migrations that have not yet been recorded in
 # the schema_migrations table, in lexicographic order.
-#
-# This runs as a one-shot container in docker-compose. In EKS this same logic
-# can be packaged as a Kubernetes Job that runs before the application
-# Deployment is rolled out.
 # -----------------------------------------------------------------------------
 set -eu
 
