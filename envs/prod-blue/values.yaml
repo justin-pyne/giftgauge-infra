@@ -13,7 +13,7 @@
 global:
   environment: prod-blue
   color: blue
-  imageTag: v0.1.3          # bumped by release-prod.yml when this color is the deploy target
+  imageTag: v0.1.4
 
 ingress:
   host: app.justinpyne.xyz
