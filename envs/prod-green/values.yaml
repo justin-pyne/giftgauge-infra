@@ -7,7 +7,7 @@
 global:
   environment: prod-green
   color: green
-  imageTag: v0.1.2
+  imageTag: v0.1.3
 
 ingress:
   host: app.justinpyne.xyz
