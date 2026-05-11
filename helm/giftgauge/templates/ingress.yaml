@@ -9,17 +9,19 @@ Public Ingress (host = .Values.ingress.host):
 
 Shadow Ingress (host = .Values.ingress.shadowHost):
   Rendered when ingress.shadowHost is non-empty. Used in prod to give each
-  color its own private testing URL (e.g., prod-green.justinpyne.xyz) so
-  the workflow can smoke-test the inactive color before flipping.
+  color its own private testing URL (e.g., prod-green.justinpyne.xyz).
 
-Path-based routing is identical for both Ingresses:
-  /api/profile/*  →  profile-service:3001
-  /api/sharing/*  →  sharing-service:3002
-  /api/scoring/*  →  scoring-service:3003
-  /               →  frontend (catch-all)
+Path routing:
+  /api/profile/(.*)   →  profile-service:3001 (strip prefix via $2)
+  /api/sharing/(.*)   →  sharing-service:3002 (strip prefix via $2)
+  /api/scoring/(.*)   →  scoring-service:3003 (strip prefix via $2)
+  /(/?)(.*)           →  frontend (preserve full path via $2)
 
-The /api/<service> prefix is stripped via the rewrite-target annotation
-so backends see paths starting at /.
+Both API and frontend paths must have two capture groups because the
+nginx.ingress.kubernetes.io/rewrite-target annotation is per-Ingress and
+expects $2. Without a capture group, the frontend's rule would rewrite
+every request to just "/" — breaking Vite's module loading of /src/main.tsx,
+/@vite/client, /@react-refresh, etc.
 ========================================================================= */}}
 
 {{- $isPublicActive := or (not .Values.global.color) (eq .Values.global.color .Values.global.activeColor) }}
@@ -48,7 +50,7 @@ spec:
     - host: {{ .Values.ingress.host }}
       http:
         paths:
-          # API paths first (with rewrite).
+          # API paths first (strip the prefix via $2).
           {{- range $name, $svc := .Values.services }}
           {{- if $svc.pathRewrite }}
           - path: {{ $svc.pathPrefix }}(/|$)(.*)
@@ -61,11 +63,12 @@ spec:
           {{- end }}
           {{- end }}
 
-          # Frontend catch-all (no rewrite). Must come last.
+          # Frontend catch-all (preserve the full path via $2).
+          # Must come last so API paths win the match.
           {{- range $name, $svc := .Values.services }}
           {{- if not $svc.pathRewrite }}
-          - path: {{ $svc.pathPrefix }}
-            pathType: Prefix
+          - path: {{ $svc.pathPrefix }}(/?)(.*)
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: {{ $name }}
@@ -114,8 +117,8 @@ spec:
 
           {{- range $name, $svc := .Values.services }}
           {{- if not $svc.pathRewrite }}
-          - path: {{ $svc.pathPrefix }}
-            pathType: Prefix
+          - path: {{ $svc.pathPrefix }}(/?)(.*)
+            pathType: ImplementationSpecific
             backend:
               service:
                 name: {{ $name }}
