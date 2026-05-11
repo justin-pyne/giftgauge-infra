@@ -7,7 +7,7 @@
 
 global:
   environment: uat
-  imageTag: v0.1.5
+  imageTag: v0.1.7
 
 ingress:
   host: uat.justinpyne.xyz
