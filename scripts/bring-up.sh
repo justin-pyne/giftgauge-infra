@@ -16,6 +16,7 @@ aws eks update-kubeconfig --region us-east-1 --name giftgauge-eks
 echo "==> Install all Helm releases"
 helm upgrade --install giftgauge ./helm/giftgauge -n dev -f envs/dev/values.yaml --wait --timeout 10m
 helm upgrade --install giftgauge ./helm/giftgauge -n qa  -f envs/qa/values.yaml  --wait --timeout 10m
+helm upgrade --install giftgauge ./helm/giftgauge -n uat  -f envs/uat/values.yaml  --wait --timeout 10m
 helm upgrade --install giftgauge ./helm/giftgauge -n prod-blue  -f envs/prod-blue/values.yaml  -f envs/prod-active-color.yaml --wait --timeout 10m
 helm upgrade --install giftgauge ./helm/giftgauge -n prod-green -f envs/prod-green/values.yaml -f envs/prod-active-color.yaml --wait --timeout 10m
 
