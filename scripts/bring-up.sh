@@ -23,6 +23,7 @@ helm upgrade --install giftgauge ./helm/giftgauge -n prod-green -f envs/prod-gre
 echo "==> All deployed. Wait ~5min for cert-manager to issue all certs, then test:"
 echo "    curl https://dev.justinpyne.xyz/api/profile/health"
 echo "    curl https://qa.justinpyne.xyz/api/profile/health"
+echo "    curl https://uat.justinpyne.xyz/api/profile/health"
 echo "    curl https://app.justinpyne.xyz/api/profile/health"
 echo "    curl https://prod-blue.justinpyne.xyz/api/profile/health"
 echo "    curl https://prod-green.justinpyne.xyz/api/profile/health"
