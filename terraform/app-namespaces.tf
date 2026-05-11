@@ -15,13 +15,14 @@
 # =============================================================================
 
 locals {
-  rds_password = random_password.rds_master.result
-  rds_user     = aws_db_instance.main.username
-  rds_host     = aws_db_instance.main.address
-  rds_port     = tostring(aws_db_instance.main.port)
-  rds_master   = aws_db_instance.main.db_name # "giftgauge"
+  rds_password         = random_password.rds_master.result
+  rds_password_encoded = urlencode(random_password.rds_master.result)
+  rds_user             = aws_db_instance.main.username
+  rds_host             = aws_db_instance.main.address
+  rds_port             = tostring(aws_db_instance.main.port)
+  rds_master           = aws_db_instance.main.db_name # "giftgauge"
 
-  rds_admin_url = "postgresql://${local.rds_user}:${local.rds_password}@${local.rds_host}:${local.rds_port}/${local.rds_master}?sslmode=no-verify"
+  rds_admin_url = "postgresql://${local.rds_user}:${local.rds_password_encoded}@${local.rds_host}:${local.rds_port}/${local.rds_master}?sslmode=no-verify"
 }
 
 # =============================================================================
@@ -44,7 +45,7 @@ resource "kubernetes_secret" "dev_db_credentials" {
     namespace = kubernetes_namespace.dev.metadata[0].name
   }
   data = {
-    DATABASE_URL       = "postgresql://${local.rds_user}:${local.rds_password}@${local.rds_host}:${local.rds_port}/giftgauge_dev?sslmode=no-verify"
+    DATABASE_URL       = "postgresql://${local.rds_user}:${local.rds_password_encoded}@${local.rds_host}:${local.rds_port}/giftgauge_dev?sslmode=no-verify"
     ADMIN_DATABASE_URL = local.rds_admin_url
     DB_HOST            = local.rds_host
     DB_PORT            = local.rds_port
@@ -75,7 +76,7 @@ resource "kubernetes_secret" "qa_db_credentials" {
     namespace = kubernetes_namespace.qa.metadata[0].name
   }
   data = {
-    DATABASE_URL       = "postgresql://${local.rds_user}:${local.rds_password}@${local.rds_host}:${local.rds_port}/giftgauge_qa?sslmode=no-verify"
+    DATABASE_URL       = "postgresql://${local.rds_user}:${local.rds_password_encoded}@${local.rds_host}:${local.rds_port}/giftgauge_qa?sslmode=no-verify"
     ADMIN_DATABASE_URL = local.rds_admin_url
     DB_HOST            = local.rds_host
     DB_PORT            = local.rds_port
@@ -106,7 +107,7 @@ resource "kubernetes_secret" "uat_db_credentials" {
     namespace = kubernetes_namespace.uat.metadata[0].name
   }
   data = {
-    DATABASE_URL       = "postgresql://${local.rds_user}:${local.rds_password}@${local.rds_host}:${local.rds_port}/giftgauge_uat?sslmode=no-verify"
+    DATABASE_URL       = "postgresql://${local.rds_user}:${local.rds_password_encoded}@${local.rds_host}:${local.rds_port}/giftgauge_uat?sslmode=no-verify"
     ADMIN_DATABASE_URL = local.rds_admin_url
     DB_HOST            = local.rds_host
     DB_PORT            = local.rds_port
@@ -138,7 +139,7 @@ resource "kubernetes_secret" "prod_blue_db_credentials" {
     namespace = kubernetes_namespace.prod_blue.metadata[0].name
   }
   data = {
-    DATABASE_URL       = "postgresql://${local.rds_user}:${local.rds_password}@${local.rds_host}:${local.rds_port}/giftgauge_prod?sslmode=no-verify"
+    DATABASE_URL       = "postgresql://${local.rds_user}:${local.rds_password_encoded}@${local.rds_host}:${local.rds_port}/giftgauge_prod?sslmode=no-verify"
     ADMIN_DATABASE_URL = local.rds_admin_url
     DB_HOST            = local.rds_host
     DB_PORT            = local.rds_port
@@ -170,7 +171,7 @@ resource "kubernetes_secret" "prod_green_db_credentials" {
     namespace = kubernetes_namespace.prod_green.metadata[0].name
   }
   data = {
-    DATABASE_URL       = "postgresql://${local.rds_user}:${local.rds_password}@${local.rds_host}:${local.rds_port}/giftgauge_prod?sslmode=no-verify"
+    DATABASE_URL       = "postgresql://${local.rds_user}:${local.rds_password_encoded}@${local.rds_host}:${local.rds_port}/giftgauge_prod?sslmode=no-verify"
     ADMIN_DATABASE_URL = local.rds_admin_url
     DB_HOST            = local.rds_host
     DB_PORT            = local.rds_port
